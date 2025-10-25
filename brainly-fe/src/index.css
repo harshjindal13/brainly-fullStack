@@ -1,1 +1,55 @@
 @import "tailwindcss";
+
+/* Pinterest-style CSS Grid Layout */
+.pinterest-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-gap: 20px;
+    padding: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .pinterest-grid {
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        grid-gap: 15px;
+        padding: 15px;
+    }
+}
+
+@media (max-width: 480px) {
+    .pinterest-grid {
+        grid-template-columns: 1fr;
+        grid-gap: 15px;
+        padding: 10px;
+    }
+}
+
+/* Card hover effects */
+.pinterest-card {
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.pinterest-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+/* Text truncation utilities */
+.line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Aspect ratio utilities */
+.aspect-video {
+    aspect-ratio: 16 / 9;
+}
+
+.aspect-[9\/16] {
+    aspect-ratio: 9 / 16;
+}

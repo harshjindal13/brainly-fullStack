@@ -1,5 +1,5 @@
 import { ShareIcon } from "../icons/ShareIcon";
-import { useEffect } from "react";
+import { useState } from "react";
 
 interface CardProps {
     title: string;
@@ -7,135 +7,172 @@ interface CardProps {
     type: "twitter" | "youtube";
 }
 
-// Utility function to extract YouTube video ID from various URL formats
-function getYouTubeVideoId(url: string): string | null {
+// Enhanced YouTube video ID extraction with Shorts support
+function getYouTubeVideoId(url: string): { videoId: string | null; isShort: boolean } {
     const regexPatterns = [
-        /(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/,
-        /youtube\.com\/embed\/([^&\n?#]+)/,
-        /youtube\.com\/v\/([^&\n?#]+)/
+        { pattern: /(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/, isShort: false },
+        { pattern: /youtube\.com\/embed\/([^&\n?#]+)/, isShort: false },
+        { pattern: /youtube\.com\/v\/([^&\n?#]+)/, isShort: false },
+        { pattern: /youtube\.com\/shorts\/([^&\n?#]+)/, isShort: true },
+        { pattern: /youtu\.be\/([^&\n?#]+)/, isShort: false }
     ];
     
-    for (const pattern of regexPatterns) {
+    for (const { pattern, isShort } of regexPatterns) {
         const match = url.match(pattern);
-        if (match) return match[1];
+        if (match) {
+            return { videoId: match[1], isShort };
+        }
     }
-    return null;
+    return { videoId: null, isShort: false };
 }
 
-// Utility function to get Twitter embed URL  
+// Get optimal thumbnail URL with multiple fallbacks
+function getYouTubeThumbnailUrl(videoId: string, isShort: boolean): string[] {
+    const baseUrl = `https://img.youtube.com/vi/${videoId}`;
+    
+    if (isShort) {
+        // For Shorts, prioritize vertical-friendly thumbnails
+        return [
+            `${baseUrl}/maxresdefault.jpg`,
+            `${baseUrl}/hqdefault.jpg`,
+            `${baseUrl}/mqdefault.jpg`,
+            `${baseUrl}/default.jpg`
+        ];
+    } else {
+        // For regular videos
+        return [
+            `${baseUrl}/maxresdefault.jpg`,
+            `${baseUrl}/sddefault.jpg`,
+            `${baseUrl}/hqdefault.jpg`,
+            `${baseUrl}/mqdefault.jpg`,
+            `${baseUrl}/default.jpg`
+        ];
+    }
+}
+
 function getTwitterEmbedUrl(url: string): string {
     const twitterUrl = url.replace('x.com', 'twitter.com');
     return `https://platform.twitter.com/embed/Tweet.html?url=${encodeURIComponent(twitterUrl)}`;
 }
 
 export function Card({ title, link, type }: CardProps) {
-    // Initialize Twitter widgets when component mounts
-    useEffect(() => {
-        if (type === "twitter" && (window as any).twttr) {
-            (window as any).twttr.widgets.load();
-        }
-    }, [type]);
-
+    const [imageLoaded, setImageLoaded] = useState(false);
+    const [currentThumbnailIndex, setCurrentThumbnailIndex] = useState(0);
+    
     const renderYouTubeContent = () => {
-        const videoId = getYouTubeVideoId(link);
+        const { videoId, isShort } = getYouTubeVideoId(link);
         
         if (!videoId) {
             return (
-                <div className="bg-red-100 p-4 rounded text-red-700 text-sm">
+                <div className="bg-red-100 p-4 rounded text-red-700 text-sm min-h-[100px] flex items-center justify-center">
                     Invalid YouTube URL format
                 </div>
             );
         }
 
+        const thumbnailUrls = getYouTubeThumbnailUrl(videoId, isShort);
+        const currentThumbnailUrl = thumbnailUrls[currentThumbnailIndex];
+
+        const handleImageError = () => {
+            if (currentThumbnailIndex < thumbnailUrls.length - 1) {
+                setCurrentThumbnailIndex(currentThumbnailIndex + 1);
+            }
+        };
+
         return (
-            <div className="relative cursor-pointer group" onClick={() => window.open(link, '_blank')}>
-                {/* YouTube Thumbnail Image */}
+            <div className={`relative cursor-pointer group ${isShort ? 'aspect-[9/16] max-h-[400px]' : 'aspect-video'}`}>
+                {/* Loading placeholder */}
+                {!imageLoaded && (
+                    <div className="absolute inset-0 bg-gray-200 animate-pulse rounded flex items-center justify-center">
+                        <div className="text-gray-500 text-sm">Loading...</div>
+                    </div>
+                )}
+                
+                {/* YouTube Thumbnail */}
                 <img
-                    src={`https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`}
+                    src={currentThumbnailUrl}
                     alt={title}
-                    className="w-full h-48 object-cover rounded transition-opacity group-hover:opacity-90"
-                    onError={(e) => {
-                        // Fallback to standard definition if maxres not available
-                        const target = e.target as HTMLImageElement;
-                        if (target.src.includes('maxresdefault')) {
-                            target.src = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
-                        } else if (target.src.includes('hqdefault')) {
-                            target.src = `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
-                        }
-                    }}
+                    className={`w-full h-full object-cover rounded transition-all duration-300 group-hover:opacity-90 ${
+                        imageLoaded ? 'opacity-100' : 'opacity-0'
+                    }`}
+                    onLoad={() => setImageLoaded(true)}
+                    onError={handleImageError}
+                    onClick={() => window.open(link, '_blank')}
                 />
                 
                 {/* Play Button Overlay */}
-                <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="bg-red-600 rounded-full p-3 opacity-80 group-hover:opacity-100 transition-opacity shadow-lg">
+                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    <div className="bg-red-600 rounded-full p-3 shadow-lg transform scale-100 group-hover:scale-110 transition-transform duration-200">
                         <svg className="w-6 h-6 text-white ml-0.5" fill="currentColor" viewBox="0 0 20 20">
                             <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"/>
                         </svg>
                     </div>
                 </div>
                 
-                {/* Video Duration Badge (Optional) */}
-                <div className="absolute bottom-2 right-2 bg-black bg-opacity-80 text-white text-xs px-2 py-1 rounded">
-                    YouTube
+                {/* Content Type Badge */}
+                <div className="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded-full">
+                    {isShort ? '🩳 Short' : '📹 Video'}
                 </div>
+                
+                {/* Gradient overlay for better text readability */}
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/50 to-transparent h-16 rounded-b"></div>
             </div>
         );
     };
 
     const renderTwitterContent = () => {
         return (
-            <div className="w-full">
-                <blockquote className="twitter-tweet" data-theme="light">
-                    <a href={link.replace('x.com', 'twitter.com')} target="_blank" rel="noopener noreferrer">
-                        {title}
-                    </a>
-                </blockquote>
-                <div className="text-sm text-gray-500 mt-2">
-                    <a 
-                        href={link.replace('x.com', 'twitter.com')} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:text-blue-800"
-                    >
-                        View on Twitter →
-                    </a>
-                </div>
+            <div className="w-full min-h-[200px] max-h-[600px] relative">
+                <iframe
+                    src={getTwitterEmbedUrl(link)}
+                    className="w-full h-full border-0 rounded"
+                    sandbox="allow-scripts allow-same-origin allow-popups"
+                    loading="lazy"
+                    title={`Twitter post: ${title}`}
+                    style={{ minHeight: '200px' }}
+                />
             </div>
         );
     };
 
     return (
-        <div className="p-4 bg-white rounded-md border-gray-200 max-w-96 border">
-            <div className="flex justify-between">
-                <div className="flex items-center">
-                    <div className="text-gray-500 pr-2">
-                        <ShareIcon />
-                    </div>
-                    <div className="font-medium text-sm">
-                        {title}
-                    </div>
-                </div>
-                
-                <div className="flex items-center">
-                    <div className="pr-2 text-gray-500">
-                        <a 
-                            href={link} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="hover:text-blue-600"
-                        >
-                            <ShareIcon />
-                        </a>
-                    </div>
-                    <div className="text-gray-500 cursor-pointer hover:text-gray-700">
-                        <ShareIcon />
-                    </div>
-                </div>
-            </div>
-            
-            <div className="pt-4">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow duration-300 w-full max-w-sm">
+            {/* Content Area - Dynamic Height */}
+            <div className="relative">
                 {type === "youtube" && renderYouTubeContent()}
                 {type === "twitter" && renderTwitterContent()}
+            </div>
+            
+            {/* Card Footer - Fixed Height */}
+            <div className="p-4 bg-white">
+                <div className="flex justify-between items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                        <h3 className="font-medium text-sm text-gray-900 line-clamp-2 leading-tight">
+                            {title}
+                        </h3>
+                        <p className="text-xs text-gray-500 mt-1 truncate">
+                            {type === "youtube" ? "YouTube" : "Twitter"} • {new Date().toLocaleDateString()}
+                        </p>
+                    </div>
+                    
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                        <button
+                            onClick={() => window.open(link, '_blank')}
+                            className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all duration-200"
+                            title="Open in new tab"
+                        >
+                            <ShareIcon />
+                        </button>
+                        
+                        <button
+                            onClick={() => {/* Handle share/copy functionality */}}
+                            className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-full transition-all duration-200"
+                            title="Share"
+                        >
+                            <ShareIcon />
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     );
