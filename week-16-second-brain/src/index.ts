@@ -2,7 +2,7 @@ import express from "express";
 import { random } from "./utils";
 import jwt from "jsonwebtoken";
 import { ContentModel, LinkModel, UserModel } from "./db";
-import { JWT_PASSWORD } from "./config";
+import { JWT_PASSWORD, PORT } from "./config";
 import { userMiddleware } from "./middleware";
 import cors from "cors";
 
@@ -55,20 +55,63 @@ app.post("/api/v1/signin", async (req, res) => {
 })
 
 app.post("/api/v1/content", userMiddleware, async (req, res) => {
-    const link = req.body.link;
-    const type = req.body.type;
-    await ContentModel.create({
-        link,
-        type,
-        title: req.body.title,
-        userId: req.userId,
-        tags: []
-    })
-
-    res.json({
-        message: "Content added"
-    })
-    
+    try {
+        console.log("📝 Creating content request received");
+        console.log("Request body:", req.body);
+        console.log("User ID from middleware:", req.userId);
+        
+        const { link, type, title } = req.body;
+        
+        // Input validation
+        if (!link || !type || !title) {
+            console.log("❌ Missing required fields");
+            res.status(400).json({
+                message: "Missing required fields: link, type, and title are required"
+            });
+            return;
+        }
+        
+        console.log("Creating content:", { link, type, title, userId: req.userId });
+        
+        const content = await ContentModel.create({
+            link,
+            type, 
+            title,
+            userId: req.userId,
+            tags: []
+        });
+        
+        console.log("✅ Content created successfully:", content._id);
+        
+        res.json({
+            message: "Content added successfully",
+            content: content
+        });
+        
+    } catch (error: any) {
+        console.error("❌ Error adding content:", error);
+        
+        if (error.name === 'ValidationError') {
+            res.status(400).json({
+                message: "Validation error",
+                details: error.message
+            });
+            return;
+        }
+        
+        if (error.name === 'MongoNetworkError') {
+            res.status(500).json({
+                message: "Database connection error - ensure MongoDB is running"
+            });
+            return;
+        }
+        
+        res.status(500).json({
+            message: "Internal server error",
+            error: process.env.NODE_ENV === 'development' ? error.message : "Contact support"
+        });
+        return;
+    }
 })
 
 app.get("/api/v1/content", userMiddleware, async (req, res) => {
@@ -165,4 +208,7 @@ app.get("/api/v1/brain/:shareLink", async (req, res) => {
 
 })
 
-app.listen(3000);
+app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+});
